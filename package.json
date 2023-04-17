@@ -1,7 +1,7 @@
 {
   "name": "html-support",
 	"displayName": "HTML-PHP Support",
-	"description": "Fixes vscode functionality in mixed HTML in PHP documents.",
+	"description": "Fixes vscode functionality for mixed HTML in PHP documents.",
 	"version": "1.0.0",
 	"publisher": "outofsync42",
 	"license": "MIT",
