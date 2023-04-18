@@ -1,11 +1,22 @@
 const vscode = require('vscode');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const custom = require('./lib/custom.js');
 const app = new custom.Application();
 const htmlSettings = new custom.ConfigSettings('html');
+const jsonc = require('jsonc-parser');
 
 var HtmlSupport = function () {
 
 	var self = this;
+
+	// Set editor.quickSuggestions settings programmatically for PHP files
+	const quickSuggestionsConfig = {
+		other: true,
+		comments: false,
+		strings: true //required for <html class="" style=""> quickSuggestions
+	};
 
 	//HTML Actions
 	this.checkAutoQuotes = function (lines, line_x, charText) {
@@ -28,7 +39,7 @@ var HtmlSupport = function () {
 				let attrs = elements[element_id]['attributes'][type];
 				for (var i in attrs) {
 					//if equal sign pressed
-					
+
 					let nextChar = isset(lines[attrs[i].line]['text'][charPos + 1]) ? lines[attrs[i].line]['text'][charPos + 1] : null;
 					if (charText == "=" && quoteType !== "empty" && attrs[i].line == position.line && position.character == attrs[i].start && position.character == attrs[i].end) {
 						if (nextChar && /[a-zA-Z]/.test(nextChar)) {
@@ -47,7 +58,7 @@ var HtmlSupport = function () {
 							if (nextChar && /[a-zA-Z]/.test(nextChar)) {
 								continue;
 							}
-							
+
 							if (lines[attrs[i].line]['text'][charPos - 1] == charText) {
 								continue;
 							}
@@ -146,6 +157,48 @@ var HtmlSupport = function () {
 			}
 		}
 	}
+	this.enableQuickSuggestions = function(bool){
+		if(bool){
+			updateLanguageSpecificSettingInSettingsJson('editor.quickSuggestions', quickSuggestionsConfig, 'php', vscode.ConfigurationTarget.Global);
+		} else {
+			updateLanguageSpecificSettingInSettingsJson('editor.quickSuggestions', null, 'php', vscode.ConfigurationTarget.Global);
+		}
+	}
+
+	async function updateLanguageSpecificSettingInSettingsJson(setting, value, languageId, target) {
+		let settingsFolderPath;
+	
+		if (target === vscode.ConfigurationTarget.Global) {
+			const appData = process.env.APPDATA || (process.platform === 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + '/.config');
+			settingsFolderPath = path.join(appData, 'Code', 'User');
+		} else {
+			settingsFolderPath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+		}
+	
+		const settingsFilePath = path.join(settingsFolderPath, 'settings.json');
+	
+		try {
+			const content = await fs.promises.readFile(settingsFilePath, 'utf8');
+			const settings = jsonc.parse(content);
+	
+			if (!settings[`[${languageId}]`]) {
+				settings[`[${languageId}]`] = {};
+			}
+	
+			if (value) {
+				settings[`[${languageId}]`][setting] = value;
+			} else {
+				if (settings[`[${languageId}]`][`${setting}`]) {
+					delete settings[`[${languageId}]`][`${setting}`];
+				}
+			}
+	
+			await fs.promises.writeFile(settingsFilePath, JSON.stringify(settings, null, 2), 'utf8');
+			//console.log(`Updated ${setting} settings for ${languageId} files.`);
+		} catch (error) {
+			console.error(`Failed to update ${setting} settings for ${languageId} files:`, error);
+		}
+	}
 }
 
 /**
@@ -190,14 +243,35 @@ function activate(context) {
 		}
 	});
 
+	htmlSupport.enableQuickSuggestions(vscode.workspace.getConfiguration('html-php-support').get('enableQuickSuggestions'));
+	
+	vscode.workspace.onDidChangeConfiguration(function (event) {
+		if (event.affectsConfiguration('html-php-support.enableQuickSuggestions')) {
+			htmlSupport.enableQuickSuggestions(vscode.workspace.getConfiguration('html-php-support').get('enableQuickSuggestions'));
+		}
+	});
+
 	//ACTIVATE
 	app.activate();
 }
 
 // this method is called when your extension is deactivated
-function deactivate() { }
+function deactivate() {
+	let htmlSupport = new HtmlSupport();
+	htmlSupport.enableQuickSuggestions(false);
+}
 
 module.exports = {
 	activate,
 	deactivate
 }
+
+
+
+
+
+exports.activate = activate;
+
+
+
+
